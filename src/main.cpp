@@ -6,6 +6,132 @@
  * When this callback is fired, it will toggle line 2 of the LCD text between
  * "I was pressed!" and nothing.
  */
+#include "main.h"
+
+class MotionController {
+public:
+  MotionController() {
+    // Initialize odometry task
+    pros::Task odometryTask(odometryLoop);
+  }
+
+  void chainDrive(std::vector<Pose> points, std::vector<bool> reverses, double exitErrorPerPoint) {
+    Point initial = {x, y}; // Use odometry variables
+
+    double dist = calc::distance(initial, {points.back().x, points.back().y});
+    double angle = math::wrap180(calc::angleDifference(initial, {points[0].x, points[0].y}) - heading); // Use odometry variable
+
+    m_linear->setTarget(dist);
+    m_angular->setTarget(angle);
+
+    double m_lastTargetAngle = calc::angleDifference(initial, {points.back().x, points.back().y}) - heading; // Use odometry variable
+
+    int iter = 0;
+
+    for (Pose p : points) {
+      if (points.back().x == p.x && points.back().y == p.y) {
+        drive({p.x, p.y}, p.theta.value_or(127));
+        break;
+      } else {
+        double linErrorToNextPoint = calc::distance({x, y}, {p.x, p.y}); // Use odometry variables
+
+        while (linErrorToNextPoint > exitErrorPerPoint) {
+          Point current = {x, y}; // Use odometry variables
+
+          linErrorToNextPoint = calc::distance(current, {p.x, p.y});
+          dist = calc::distance(current, {points.back().x, points.back().y});
+          angle = math::wrap180(calc::angleDifference(current, {p.x, p.y}) - heading); // Use odometry variable
+
+          dist *= cos(math::degToRad(angle));
+
+          if (reverses.size() >= iter && reverses[iter]) {
+            angle = math::wrap180(angle + 180);
+          }
+
+          double distOutput = m_linear->calculate(dist);
+          double angOutput = m_angular->calculate(angle);
+
+          bool closeToTarget = (calc::distance(current, {p.x, p.y}) < 5);
+          if (closeToTarget) {
+            angOutput = 0;
+          }
+
+          double maxSpeed = p.theta.value_or(127);
+
+          distOutput = std::clamp(distOutput, -maxSpeed, maxSpeed);
+
+          double lSpeed = distOutput + angOutput;
+          double rSpeed = distOutput - angOutput;
+
+          double speedRatio = std::max(std::abs(lSpeed), std::abs(rSpeed)) / maxSpeed;
+          if (speedRatio > 1) {
+            lSpeed /= speedRatio;
+            rSpeed /= speedRatio;
+          }
+
+          m_chassis->setVoltage(lSpeed, rSpeed);
+
+          pros::delay(MOTION_TIMESTEP);
+          m_processTimer += MOTION_TIMESTEP;
+        }
+      }
+    }
+
+    m_processTimer = 0;
+  }
+
+private:
+  static double x, y, heading;
+  static double leftLast, rightLast;
+  static constexpr double WHEELBASE = 10.0;
+
+  // Your PID implementation
+  PIDController* m_linear = new PIDController(/* Your PID parameters here */);
+  PIDController* m_angular = new PIDController(/* Your PID parameters here */);
+  Chassis* m_chassis = new Chassis(/* Your chassis parameters here */);
+
+  // Odometry loop
+  static void odometryLoop(void*) {
+    while (true) {
+      double left = leftRotationSensor.get_value();
+      double right = rightRotationSensor.get_value();
+      double dLeft = left - leftLast;
+      double dRight = right - rightLast;
+      double dHeading = (dLeft - dRight) / WHEELBASE;
+
+      heading += dHeading;
+      double avgDelta = (dLeft + dRight) / 2.0;
+      x += avgDelta * cos(heading);
+      y += avgDelta * sin(heading);
+
+      printf("X: %f, Y: %f, Heading: %f\n", x, y, heading);
+
+      leftLast = left;
+      rightLast = right;
+      pros::delay(10);
+    }
+  }
+};
+
+// Define static member variables
+double MotionController::x = 0;
+double MotionController::y = 0;
+double MotionController::heading = 0;
+double MotionController::leftLast = 0;
+double MotionController::rightLast = 0;
+
+pros::ADIEncoder leftRotationSensor(1, 2, false);
+pros::ADIEncoder rightRotationSensor(3, 4, false);
+
+void initializemotion() {
+  MotionController motionController;
+}
+
+
+
+
+
+
 void on_center_button() {
 	static bool pressed = false;
 	pressed = !pressed;
@@ -26,7 +152,7 @@ void initialize() {
 	pros::lcd::initialize();
 	pros::lcd::set_text(1, "Hello PROS User!");
 
-	pros::lcd::register_btn1_cb(on_center_button);
+	intializemotion();
 }
 
 /**
