@@ -1,4 +1,3 @@
-# odometryVRC
 # Kalman Filter Odometry for VRC Teams
 
 ## Authors
