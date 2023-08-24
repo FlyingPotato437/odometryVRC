@@ -4,7 +4,7 @@
 Srikanth Samy and Arpit Jena
 
 ## Description
-This repository contains the implementation of a Kalman Filter for odometry estimation in the context of Virtual Robotic Challenges (VRC). It is designed to provide precise position tracking by fusing sensor data.
+This repository contains the implementation of a Kalman Filter for odometry estimation in the context of Vex Robotics Competition (VRC). It is designed to provide precise position tracking by fusing sensor data.
 
 ## Features
 - Real-time position estimation
